@@ -10,7 +10,6 @@
 </head>
 <body>
     <script>
-    // Initialize Firebase with your config
     const firebaseConfig = {
       apiKey: "AIzaSyA-PdosVTGoJ1MTL3xD3XybhHJc7buUjDo",
       authDomain: "multiplayersnakegame.firebaseapp.com",
@@ -21,7 +20,7 @@
     };
     firebase.initializeApp(firebaseConfig);
 
-    const GRID_SIZE = 20;
+    const GRID_SIZE = 30;
     const CELL_SIZE = 20;
     const GAME_WIDTH = GRID_SIZE * CELL_SIZE;
     const GAME_HEIGHT = GRID_SIZE * CELL_SIZE;
@@ -42,6 +41,8 @@
     let player;
     let otherPlayer;
     let food;
+    let powerUp;
+    let obstacles;
     let gameId;
     let playerId;
     let playerScore = 0;
@@ -49,9 +50,12 @@
     let playerScoreText;
     let otherPlayerScoreText;
     let gameOver = false;
+    let gameMode = 'classic';
+    let powerUpActive = false;
 
     function preload() {
         this.load.image('food', 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAoAAAAKCAYAAACNMs+9AAAACXBIWXMAAAsTAAALEwEAmpwYAAAAIGNIUk0AAHolAACAgwAA+f8AAIDpAAB1MAAA6mAAADqYAAAXb5JfxUYAAAAmSURBVHjaYmRgYPj//z8DGmBiQAVMDFQGoxZSzUKQQnQZAPPTBtj9Z8k2AAAAAElFTkSuQmCC');
+        this.load.image('powerUp', 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAoAAAAKCAYAAACNMs+9AAAACXBIWXMAAAsTAAALEwEAmpwYAAAAIGNIUk0AAHolAACAgwAA+f8AAIDpAAB1MAAA6mAAADqYAAAXb5JfxUYAAAAmSURBVHjaYmRgYPj//z8DGmBiQAVMDFQGoxZSzUKQQnQZAPPTBtj9Z8k2AAAAAElFTkSuQmCC');
     }
 
     function create() {
@@ -60,8 +64,19 @@
 
         cursors = this.input.keyboard.createCursorKeys();
         food = this.add.image(0, 0, 'food').setScale(2);
-        player = this.add.rectangle(0, 0, CELL_SIZE, CELL_SIZE, 0x00ff00);
-        otherPlayer = this.add.rectangle(0, 0, CELL_SIZE, CELL_SIZE, 0xff0000);
+        powerUp = this.add.image(0, 0, 'powerUp').setScale(2).setTint(0x00ffff);
+        powerUp.visible = false;
+
+        player = {
+            body: [],
+            head: this.add.rectangle(0, 0, CELL_SIZE, CELL_SIZE, 0x00ff00)
+        };
+        otherPlayer = {
+            body: [],
+            head: this.add.rectangle(0, 0, CELL_SIZE, CELL_SIZE, 0xff0000)
+        };
+
+        obstacles = this.add.group();
 
         playerScoreText = this.add.text(10, 10, 'You: 0', { fontSize: '16px', fill: '#00ff00' });
         otherPlayerScoreText = this.add.text(10, 30, 'Opponent: 0', { fontSize: '16px', fill: '#ff0000' });
@@ -70,6 +85,7 @@
         if (!gameId) {
             gameId = Math.random().toString(36).substring(2, 15);
             alert("Your game ID is: " + gameId);
+            gameMode = prompt("Enter game mode (classic, obstacles, or speedup):");
         }
 
         playerId = Math.random().toString(36).substring(2, 15);
@@ -80,20 +96,19 @@
             y: Math.floor(GRID_SIZE/2) * CELL_SIZE,
             dx: CELL_SIZE,
             dy: 0,
-            score: 0
+            score: 0,
+            body: []
         });
 
         gameRef.child('players').on('value', (snapshot) => {
             snapshot.forEach((childSnapshot) => {
                 const playerData = childSnapshot.val();
                 if (childSnapshot.key === playerId) {
-                    player.x = playerData.x;
-                    player.y = playerData.y;
+                    updateSnake(player, playerData);
                     playerScore = playerData.score;
                     playerScoreText.setText('You: ' + playerScore);
                 } else {
-                    otherPlayer.x = playerData.x;
-                    otherPlayer.y = playerData.y;
+                    updateSnake(otherPlayer, playerData);
                     otherPlayerScore = playerData.score;
                     otherPlayerScoreText.setText('Opponent: ' + otherPlayerScore);
                 }
@@ -105,10 +120,33 @@
             food.y = snapshot.val().y;
         });
 
-        gameRef.child('food').set({
-            x: Math.floor(Math.random() * (GRID_SIZE-2) + 1) * CELL_SIZE,
-            y: Math.floor(Math.random() * (GRID_SIZE-2) + 1) * CELL_SIZE
+        gameRef.child('powerUp').on('value', (snapshot) => {
+            if (snapshot.val()) {
+                powerUp.x = snapshot.val().x;
+                powerUp.y = snapshot.val().y;
+                powerUp.visible = true;
+            } else {
+                powerUp.visible = false;
+            }
         });
+
+        gameRef.child('obstacles').on('value', (snapshot) => {
+            obstacles.clear(true, true);
+            snapshot.forEach((childSnapshot) => {
+                const obstacleData = childSnapshot.val();
+                obstacles.add(this.add.rectangle(obstacleData.x, obstacleData.y, CELL_SIZE, CELL_SIZE, 0x808080));
+            });
+        });
+
+        gameRef.child('gameMode').once('value', (snapshot) => {
+            gameMode = snapshot.val() || 'classic';
+            if (gameMode === 'obstacles') {
+                createObstacles();
+            }
+        });
+
+        spawnFood();
+        spawnPowerUp();
 
         this.time.addEvent({
             delay: 150,
@@ -121,13 +159,13 @@
     function update() {
         if (gameOver) return;
 
-        if (cursors.left.isDown && player.dx === 0) {
+        if (cursors.left.isDown && player.head.dx === 0) {
             updatePlayerDirection(-CELL_SIZE, 0);
-        } else if (cursors.right.isDown && player.dx === 0) {
+        } else if (cursors.right.isDown && player.head.dx === 0) {
             updatePlayerDirection(CELL_SIZE, 0);
-        } else if (cursors.up.isDown && player.dy === 0) {
+        } else if (cursors.up.isDown && player.head.dy === 0) {
             updatePlayerDirection(0, -CELL_SIZE);
-        } else if (cursors.down.isDown && player.dy === 0) {
+        } else if (cursors.down.isDown && player.head.dy === 0) {
             updatePlayerDirection(0, CELL_SIZE);
         }
     }
@@ -135,8 +173,8 @@
     function moveSnake() {
         if (gameOver) return;
 
-        const newX = player.x + player.dx;
-        const newY = player.y + player.dy;
+        const newX = player.head.x + player.head.dx;
+        const newY = player.head.y + player.head.dy;
 
         if (checkCollision(newX, newY)) {
             gameOver = true;
@@ -144,29 +182,38 @@
             return;
         }
 
-        player.x = newX;
-        player.y = newY;
+        // Move body
+        for (let i = player.body.length - 1; i > 0; i--) {
+            player.body[i].x = player.body[i-1].x;
+            player.body[i].y = player.body[i-1].y;
+        }
+        if (player.body.length > 0) {
+            player.body[0].x = player.head.x;
+            player.body[0].y = player.head.y;
+        }
+
+        // Move head
+        player.head.x = newX;
+        player.head.y = newY;
 
         firebase.database().ref('games/' + gameId + '/players/' + playerId).update({
-            x: player.x,
-            y: player.y
+            x: player.head.x,
+            y: player.head.y,
+            body: player.body.map(segment => ({x: segment.x, y: segment.y}))
         });
 
-        if (player.x === food.x && player.y === food.y) {
-            playerScore++;
-            firebase.database().ref('games/' + gameId + '/players/' + playerId).update({
-                score: playerScore
-            });
-            firebase.database().ref('games/' + gameId + '/food').set({
-                x: Math.floor(Math.random() * (GRID_SIZE-2) + 1) * CELL_SIZE,
-                y: Math.floor(Math.random() * (GRID_SIZE-2) + 1) * CELL_SIZE
-            });
+        if (player.head.x === food.x && player.head.y === food.y) {
+            eatFood();
+        }
+
+        if (powerUp.visible && player.head.x === powerUp.x && player.head.y === powerUp.y) {
+            activatePowerUp();
         }
     }
 
     function updatePlayerDirection(dx, dy) {
-        player.dx = dx;
-        player.dy = dy;
+        player.head.dx = dx;
+        player.head.dy = dy;
         firebase.database().ref('games/' + gameId + '/players/' + playerId).update({
             dx: dx,
             dy: dy
@@ -179,12 +226,109 @@
             return true;
         }
 
+        // Self collision
+        if (player.body.some(segment => segment.x === x && segment.y === y)) {
+            return true;
+        }
+
         // Other player collision
-        if (x === otherPlayer.x && y === otherPlayer.y) {
+        if (otherPlayer.head.x === x && otherPlayer.head.y === y) {
+            return true;
+        }
+
+        // Obstacle collision
+        if (gameMode === 'obstacles' && obstacles.getChildren().some(obs => obs.x === x && obs.y === y)) {
             return true;
         }
 
         return false;
+    }
+
+    function eatFood() {
+        playerScore++;
+        firebase.database().ref('games/' + gameId + '/players/' + playerId).update({
+            score: playerScore
+        });
+
+        // Grow snake
+        const newSegment = game.scene.scenes[0].add.rectangle(
+            player.body.length > 0 ? player.body[player.body.length-1].x : player.head.x,
+            player.body.length > 0 ? player.body[player.body.length-1].y : player.head.y,
+            CELL_SIZE, CELL_SIZE, 0x00ff00
+        );
+        player.body.push(newSegment);
+
+        spawnFood();
+        if (Math.random() < 0.2) { // 20% chance to spawn a power-up
+            spawnPowerUp();
+        }
+    }
+
+    function spawnFood() {
+        let newX, newY;
+        do {
+            newX = Math.floor(Math.random() * (GRID_SIZE-2) + 1) * CELL_SIZE;
+            newY = Math.floor(Math.random() * (GRID_SIZE-2) + 1) * CELL_SIZE;
+        } while (checkCollision(newX, newY));
+
+        firebase.database().ref('games/' + gameId + '/food').set({
+            x: newX,
+            y: newY
+        });
+    }
+
+    function spawnPowerUp() {
+        let newX, newY;
+        do {
+            newX = Math.floor(Math.random() * (GRID_SIZE-2) + 1) * CELL_SIZE;
+            newY = Math.floor(Math.random() * (GRID_SIZE-2) + 1) * CELL_SIZE;
+        } while (checkCollision(newX, newY));
+
+        firebase.database().ref('games/' + gameId + '/powerUp').set({
+            x: newX,
+            y: newY
+        });
+    }
+
+    function activatePowerUp() {
+        powerUpActive = true;
+        player.head.setFillStyle(0x00ffff);
+        setTimeout(() => {
+            powerUpActive = false;
+            player.head.setFillStyle(0x00ff00);
+        }, 5000);
+
+        firebase.database().ref('games/' + gameId + '/powerUp').remove();
+    }
+
+    function updateSnake(snake, data) {
+        snake.head.x = data.x;
+        snake.head.y = data.y;
+        snake.head.dx = data.dx;
+        snake.head.dy = data.dy;
+
+        // Update body
+        while (snake.body.length < data.body.length) {
+            const newSegment = game.scene.scenes[0].add.rectangle(0, 0, CELL_SIZE, CELL_SIZE, snake === player ? 0x00ff00 : 0xff0000);
+            snake.body.push(newSegment);
+        }
+        data.body.forEach((segment, index) => {
+            snake.body[index].x = segment.x;
+            snake.body[index].y = segment.y;
+        });
+    }
+
+    function createObstacles() {
+        const obstaclesData = [];
+        for (let i = 0; i < 10; i++) {
+            let x, y;
+            do {
+                x = Math.floor(Math.random() * (GRID_SIZE-2) + 1) * CELL_SIZE;
+                y = Math.floor(Math.random() * (GRID_SIZE-2) + 1) * CELL_SIZE;
+            } while (obstaclesData.some(obs => obs.x === x && obs.y === y));
+            obstaclesData.push({x, y});
+        }
+        firebase.database().ref('games/' + gameId + '/obstacles').set(obstaclesData);
     }
     </script>
 </body>
