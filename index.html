@@ -6,13 +6,9 @@
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
     <style>
         body { margin: 0; display: flex; justify-content: center; align-items: center; height: 100vh; background-color: #f0f0f0; }
-        #chatBox { position: absolute; right: 10px; top: 10px; width: 200px; height: 300px; background-color: rgba(255,255,255,0.8); overflow-y: scroll; }
-        #chatInput { position: absolute; right: 10px; top: 320px; width: 200px; }
     </style>
 </head>
 <body>
-    <div id="chatBox"></div>
-    <input type="text" id="chatInput" placeholder="Type to chat...">
     <script>
     const firebaseConfig = {
       apiKey: "AIzaSyA-PdosVTGoJ1MTL3xD3XybhHJc7buUjDo",
@@ -90,26 +86,6 @@
         });
 
         spawnFood();
-
-        gameRef.child('chat').on('child_added', (snapshot) => {
-            const message = snapshot.val();
-            const chatBox = document.getElementById('chatBox');
-            chatBox.innerHTML += `<p>${message.sender}: ${message.text}</p>`;
-            chatBox.scrollTop = chatBox.scrollHeight;
-        });
-
-        document.getElementById('chatInput').addEventListener('keypress', function(e) {
-            if (e.key === 'Enter') {
-                const message = this.value;
-                if (message) {
-                    gameRef.child('chat').push({
-                        sender: playerId,
-                        text: message
-                    });
-                    this.value = '';
-                }
-            }
-        });
     }
 
     function update() {
