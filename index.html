@@ -77,9 +77,11 @@
     function updateSelectedDifficulty(scene) {
         difficultyTexts.forEach((text, index) => {
             if (index === selectedDifficulty) {
-                text.setColor('#ffff00').setUnderline(true);
+                text.setColor('#ffff00');
+                text.setText('_' + text.text + '_');  // Adding underscores to simulate underline
             } else {
-                text.setColor('#ffffff').setUnderline(false);
+                text.setColor('#ffffff');
+                text.setText(text.text.replace(/^_|_$/g, ''));  // Remove underscores if present
             }
         });
     }
