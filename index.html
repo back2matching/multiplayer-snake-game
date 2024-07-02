@@ -4,24 +4,26 @@
     <script src="https://cdn.jsdelivr.net/npm/phaser@3.55.2/dist/phaser.min.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
+    <style>
+        body { margin: 0; display: flex; justify-content: center; align-items: center; height: 100vh; background-color: #f0f0f0; }
+    </style>
 </head>
 <body>
     <script>
-    // Initialize Firebase (replace with your own config)
     const firebaseConfig = {
-      apiKey: "AIzaSyA-PdosVTGoJ1MTL3xD3XybhHJc7buUjDo",
-      authDomain: "multiplayersnakegame.firebaseapp.com",
-      projectId: "multiplayersnakegame",
-      storageBucket: "multiplayersnakegame.appspot.com",
-      messagingSenderId: "954908084436",
-      appId: "1:954908084436:web:0ac77cc7cecbdd30ed9341"
+      // Your Firebase configuration here
     };
     firebase.initializeApp(firebaseConfig);
 
+    const GRID_SIZE = 20;
+    const CELL_SIZE = 20;
+    const GAME_WIDTH = GRID_SIZE * CELL_SIZE;
+    const GAME_HEIGHT = GRID_SIZE * CELL_SIZE;
+
     const config = {
         type: Phaser.AUTO,
-        width: 800,
-        height: 600,
+        width: GAME_WIDTH,
+        height: GAME_HEIGHT,
         scene: {
             preload: preload,
             create: create,
@@ -36,18 +38,28 @@
     let food;
     let gameId;
     let playerId;
+    let playerScore = 0;
+    let otherPlayerScore = 0;
+    let playerScoreText;
+    let otherPlayerScoreText;
+    let gameOver = false;
 
     function preload() {
-        this.load.image('food', 'https://labs.phaser.io/assets/particles/red.png');
+        this.load.image('food', 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAoAAAAKCAYAAACNMs+9AAAACXBIWXMAAAsTAAALEwEAmpwYAAAAIGNIUk0AAHolAACAgwAA+f8AAIDpAAB1MAAA6mAAADqYAAAXb5JfxUYAAAAmSURBVHjaYmRgYPj//z8DGmBiQAVMDFQGoxZSzUKQQnQZAPPTBtj9Z8k2AAAAAElFTkSuQmCC');
     }
 
     function create() {
-        cursors = this.input.keyboard.createCursorKeys();
-        food = this.add.image(400, 300, 'food');
-        player = this.add.rectangle(100, 100, 32, 32, 0x00ff00);
-        otherPlayer = this.add.rectangle(700, 500, 32, 32, 0xff0000);
+        this.add.rectangle(GAME_WIDTH/2, GAME_HEIGHT/2, GAME_WIDTH, GAME_HEIGHT, 0x000000);
+        this.add.rectangle(GAME_WIDTH/2, GAME_HEIGHT/2, GAME_WIDTH-CELL_SIZE, GAME_HEIGHT-CELL_SIZE, 0xffff00).setStrokeStyle(CELL_SIZE, 0xffff00);
 
-        // Generate or join game
+        cursors = this.input.keyboard.createCursorKeys();
+        food = this.add.image(0, 0, 'food').setScale(2);
+        player = this.add.rectangle(0, 0, CELL_SIZE, CELL_SIZE, 0x00ff00);
+        otherPlayer = this.add.rectangle(0, 0, CELL_SIZE, CELL_SIZE, 0xff0000);
+
+        playerScoreText = this.add.text(10, 10, 'You: 0', { fontSize: '16px', fill: '#00ff00' });
+        otherPlayerScoreText = this.add.text(10, 30, 'Opponent: 0', { fontSize: '16px', fill: '#ff0000' });
+
         gameId = prompt("Enter game ID to join, or leave blank to create new game:");
         if (!gameId) {
             gameId = Math.random().toString(36).substring(2, 15);
@@ -56,18 +68,28 @@
 
         playerId = Math.random().toString(36).substring(2, 15);
 
-        // Set up Firebase listeners
         const gameRef = firebase.database().ref('games/' + gameId);
         gameRef.child('players').child(playerId).set({
-            x: player.x,
-            y: player.y
+            x: Math.floor(GRID_SIZE/4) * CELL_SIZE,
+            y: Math.floor(GRID_SIZE/2) * CELL_SIZE,
+            dx: CELL_SIZE,
+            dy: 0,
+            score: 0
         });
 
         gameRef.child('players').on('value', (snapshot) => {
             snapshot.forEach((childSnapshot) => {
-                if (childSnapshot.key !== playerId) {
-                    otherPlayer.x = childSnapshot.val().x;
-                    otherPlayer.y = childSnapshot.val().y;
+                const playerData = childSnapshot.val();
+                if (childSnapshot.key === playerId) {
+                    player.x = playerData.x;
+                    player.y = playerData.y;
+                    playerScore = playerData.score;
+                    playerScoreText.setText('You: ' + playerScore);
+                } else {
+                    otherPlayer.x = playerData.x;
+                    otherPlayer.y = playerData.y;
+                    otherPlayerScore = playerData.score;
+                    otherPlayerScoreText.setText('Opponent: ' + otherPlayerScore);
                 }
             });
         });
@@ -77,39 +99,86 @@
             food.y = snapshot.val().y;
         });
 
-        // Initialize food position
         gameRef.child('food').set({
-            x: Phaser.Math.Between(0, 800),
-            y: Phaser.Math.Between(0, 600)
+            x: Math.floor(Math.random() * (GRID_SIZE-2) + 1) * CELL_SIZE,
+            y: Math.floor(Math.random() * (GRID_SIZE-2) + 1) * CELL_SIZE
+        });
+
+        this.time.addEvent({
+            delay: 150,
+            callback: moveSnake,
+            callbackScope: this,
+            loop: true
         });
     }
 
     function update() {
-        if (cursors.left.isDown) {
-            player.x -= 5;
-        } else if (cursors.right.isDown) {
-            player.x += 5;
+        if (gameOver) return;
+
+        if (cursors.left.isDown && player.dx === 0) {
+            updatePlayerDirection(-CELL_SIZE, 0);
+        } else if (cursors.right.isDown && player.dx === 0) {
+            updatePlayerDirection(CELL_SIZE, 0);
+        } else if (cursors.up.isDown && player.dy === 0) {
+            updatePlayerDirection(0, -CELL_SIZE);
+        } else if (cursors.down.isDown && player.dy === 0) {
+            updatePlayerDirection(0, CELL_SIZE);
+        }
+    }
+
+    function moveSnake() {
+        if (gameOver) return;
+
+        const newX = player.x + player.dx;
+        const newY = player.y + player.dy;
+
+        if (checkCollision(newX, newY)) {
+            gameOver = true;
+            alert('Game Over! Your score: ' + playerScore);
+            return;
         }
 
-        if (cursors.up.isDown) {
-            player.y -= 5;
-        } else if (cursors.down.isDown) {
-            player.y += 5;
-        }
+        player.x = newX;
+        player.y = newY;
 
-        // Update player position in Firebase
-        firebase.database().ref('games/' + gameId + '/players/' + playerId).set({
+        firebase.database().ref('games/' + gameId + '/players/' + playerId).update({
             x: player.x,
             y: player.y
         });
 
-        // Check for food collision
-        if (Phaser.Geom.Intersects.RectangleToRectangle(player.getBounds(), food.getBounds())) {
+        if (player.x === food.x && player.y === food.y) {
+            playerScore++;
+            firebase.database().ref('games/' + gameId + '/players/' + playerId).update({
+                score: playerScore
+            });
             firebase.database().ref('games/' + gameId + '/food').set({
-                x: Phaser.Math.Between(0, 800),
-                y: Phaser.Math.Between(0, 600)
+                x: Math.floor(Math.random() * (GRID_SIZE-2) + 1) * CELL_SIZE,
+                y: Math.floor(Math.random() * (GRID_SIZE-2) + 1) * CELL_SIZE
             });
         }
+    }
+
+    function updatePlayerDirection(dx, dy) {
+        player.dx = dx;
+        player.dy = dy;
+        firebase.database().ref('games/' + gameId + '/players/' + playerId).update({
+            dx: dx,
+            dy: dy
+        });
+    }
+
+    function checkCollision(x, y) {
+        // Wall collision
+        if (x < CELL_SIZE || x >= GAME_WIDTH - CELL_SIZE || y < CELL_SIZE || y >= GAME_HEIGHT - CELL_SIZE) {
+            return true;
+        }
+
+        // Other player collision
+        if (x === otherPlayer.x && y === otherPlayer.y) {
+            return true;
+        }
+
+        return false;
     }
     </script>
 </body>
