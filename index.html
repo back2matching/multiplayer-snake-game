@@ -8,10 +8,13 @@
 </head>
 <body>
     <script>
-    const GRID_SIZE = 20;
+    const GRID_SIZE = 22;  // Increased to accommodate border
     const CELL_SIZE = 15;
     const GAME_WIDTH = GRID_SIZE * CELL_SIZE;
     const GAME_HEIGHT = GRID_SIZE * CELL_SIZE;
+
+    let gameState = 'menu';
+    let aiDifficulty = 'medium';
 
     const config = {
         type: Phaser.AUTO,
@@ -19,6 +22,7 @@
         height: GAME_HEIGHT,
         backgroundColor: '#000000',
         scene: {
+            preload: preload,
             create: create,
             update: update
         }
@@ -33,39 +37,83 @@
     let aiScore = 0;
     let scoreText;
     let gameOver = false;
+    let startButton;
+    let restartButton;
+    let eatSound;
+    let gameOverSound;
+    let border;
+
+    function preload() {
+        this.load.audio('eat', 'https://opengameart.org/sites/default/files/audio_preview/Bite%20sound%20effect.mp3');
+        this.load.audio('gameover', 'https://opengameart.org/sites/default/files/audio_preview/Life%20Lost%20-%20Game%20Over.mp3');
+    }
 
     function create() {
-        this.add.rectangle(GAME_WIDTH/2, GAME_HEIGHT/2, GAME_WIDTH, GAME_HEIGHT, 0x000000);
-        this.add.rectangle(GAME_WIDTH/2, GAME_HEIGHT/2, GAME_WIDTH-CELL_SIZE, GAME_HEIGHT-CELL_SIZE, 0xffff00).setStrokeStyle(CELL_SIZE, 0xffff00);
-
         cursors = this.input.keyboard.createCursorKeys();
+        eatSound = this.sound.add('eat');
+        gameOverSound = this.sound.add('gameover');
+        createMenu(this);
+    }
+
+    function createMenu(scene) {
+        scene.add.text(GAME_WIDTH/2, GAME_HEIGHT/4, 'Snake vs AI', { fontSize: '32px', fill: '#fff' }).setOrigin(0.5);
+        
+        let easyButton = scene.add.text(GAME_WIDTH/2 - 100, GAME_HEIGHT/2, 'Easy', { fontSize: '24px', fill: '#fff' })
+            .setInteractive()
+            .on('pointerdown', () => { aiDifficulty = 'easy'; startGame(scene); });
+        
+        let mediumButton = scene.add.text(GAME_WIDTH/2, GAME_HEIGHT/2, 'Medium', { fontSize: '24px', fill: '#fff' })
+            .setOrigin(0.5)
+            .setInteractive()
+            .on('pointerdown', () => { aiDifficulty = 'medium'; startGame(scene); });
+        
+        let hardButton = scene.add.text(GAME_WIDTH/2 + 100, GAME_HEIGHT/2, 'Hard', { fontSize: '24px', fill: '#fff' })
+            .setInteractive()
+            .on('pointerdown', () => { aiDifficulty = 'hard'; startGame(scene); });
+    }
+
+    function startGame(scene) {
+        gameState = 'playing';
+        playerScore = 0;
+        aiScore = 0;
+        gameOver = false;
+
+        // Create border
+        border = scene.add.group();
+        for (let x = 0; x < GRID_SIZE; x++) {
+            for (let y = 0; y < GRID_SIZE; y++) {
+                if (x === 0 || x === GRID_SIZE - 1 || y === 0 || y === GRID_SIZE - 1) {
+                    border.add(scene.add.rectangle(x * CELL_SIZE + CELL_SIZE / 2, y * CELL_SIZE + CELL_SIZE / 2, CELL_SIZE, CELL_SIZE, 0xffff00));
+                }
+            }
+        }
         
         player = {
-            body: [this.add.rectangle(CELL_SIZE * 5, CELL_SIZE * 10, CELL_SIZE * 0.75, CELL_SIZE * 0.75, 0x00ff00)],
+            body: [scene.add.rectangle(CELL_SIZE * 6, CELL_SIZE * 11, CELL_SIZE * 0.75, CELL_SIZE * 0.75, 0x00ff00)],
             direction: {x: 1, y: 0},
             nextDirection: {x: 1, y: 0}
         };
 
         ai = {
-            body: [this.add.rectangle(CELL_SIZE * 15, CELL_SIZE * 10, CELL_SIZE * 0.75, CELL_SIZE * 0.75, 0xff0000)],
+            body: [scene.add.rectangle(CELL_SIZE * 16, CELL_SIZE * 11, CELL_SIZE * 0.75, CELL_SIZE * 0.75, 0xff0000)],
             direction: {x: -1, y: 0}
         };
 
-        food = this.add.rectangle(0, 0, CELL_SIZE * 0.75, CELL_SIZE * 0.75, 0xffffff);
-        spawnFood(this);
+        food = scene.add.rectangle(0, 0, CELL_SIZE * 0.75, CELL_SIZE * 0.75, 0xffffff);
+        spawnFood(scene);
 
-        scoreText = this.add.text(16, 16, 'Player: 0  AI: 0', { fontSize: '18px', fill: '#fff' });
+        scoreText = scene.add.text(16, 16, 'Player: 0  AI: 0', { fontSize: '18px', fill: '#fff' });
 
-        this.time.addEvent({
+        scene.time.addEvent({
             delay: 150,
             callback: moveSnakes,
-            callbackScope: this,
+            callbackScope: scene,
             loop: true
         });
     }
 
     function update() {
-        if (gameOver) return;
+        if (gameState !== 'playing') return;
 
         if (cursors.left.isDown && player.direction.x === 0) {
             player.nextDirection = {x: -1, y: 0};
@@ -79,7 +127,7 @@
     }
 
     function moveSnakes() {
-        if (gameOver) return;
+        if (gameState !== 'playing') return;
 
         // Move player
         player.direction = player.nextDirection;
@@ -124,23 +172,29 @@
         let dx = food.x - ai.body[0].x;
         let dy = food.y - ai.body[0].y;
 
-        if (Math.abs(dx) > Math.abs(dy)) {
-            ai.direction = {x: dx > 0 ? 1 : -1, y: 0};
+        if (Math.random() < getAIDifficultyChance()) {
+            if (Math.abs(dx) > Math.abs(dy)) {
+                ai.direction = {x: dx > 0 ? 1 : -1, y: 0};
+            } else {
+                ai.direction = {x: 0, y: dy > 0 ? 1 : -1};
+            }
         } else {
-            ai.direction = {x: 0, y: dy > 0 ? 1 : -1};
+            // Random movement
+            let directions = [{x: 1, y: 0}, {x: -1, y: 0}, {x: 0, y: 1}, {x: 0, y: -1}];
+            ai.direction = directions[Math.floor(Math.random() * directions.length)];
         }
 
         // Avoid immediate collision
         let nextX = ai.body[0].x + ai.direction.x * CELL_SIZE;
         let nextY = ai.body[0].y + ai.direction.y * CELL_SIZE;
-        if (nextX < CELL_SIZE || nextX >= GAME_WIDTH - CELL_SIZE || 
-            nextY < CELL_SIZE || nextY >= GAME_HEIGHT - CELL_SIZE ||
+        if (nextX <= CELL_SIZE || nextX >= GAME_WIDTH - CELL_SIZE * 2 || 
+            nextY <= CELL_SIZE || nextY >= GAME_HEIGHT - CELL_SIZE * 2 ||
             ai.body.some((segment, index) => index > 0 && segment.x === nextX && segment.y === nextY)) {
             // Choose a random safe direction
             let directions = [{x: 1, y: 0}, {x: -1, y: 0}, {x: 0, y: 1}, {x: 0, y: -1}];
             directions = directions.filter(dir => 
-                !(nextX + dir.x * CELL_SIZE < CELL_SIZE || nextX + dir.x * CELL_SIZE >= GAME_WIDTH - CELL_SIZE || 
-                nextY + dir.y * CELL_SIZE < CELL_SIZE || nextY + dir.y * CELL_SIZE >= GAME_HEIGHT - CELL_SIZE)
+                !(nextX + dir.x * CELL_SIZE <= CELL_SIZE || nextX + dir.x * CELL_SIZE >= GAME_WIDTH - CELL_SIZE * 2 || 
+                nextY + dir.y * CELL_SIZE <= CELL_SIZE || nextY + dir.y * CELL_SIZE >= GAME_HEIGHT - CELL_SIZE * 2)
             );
             if (directions.length > 0) {
                 ai.direction = directions[Math.floor(Math.random() * directions.length)];
@@ -148,11 +202,20 @@
         }
     }
 
+    function getAIDifficultyChance() {
+        switch(aiDifficulty) {
+            case 'easy': return 0.3;
+            case 'medium': return 0.6;
+            case 'hard': return 0.9;
+            default: return 0.6;
+        }
+    }
+
     function checkCollision(snake) {
         let head = snake.body[0];
         // Wall collision
-        if (head.x < CELL_SIZE || head.x >= GAME_WIDTH - CELL_SIZE || 
-            head.y < CELL_SIZE || head.y >= GAME_HEIGHT - CELL_SIZE) {
+        if (head.x <= CELL_SIZE || head.x >= GAME_WIDTH - CELL_SIZE * 2 || 
+            head.y <= CELL_SIZE || head.y >= GAME_HEIGHT - CELL_SIZE * 2) {
             return true;
         }
         // Self collision
@@ -169,15 +232,16 @@
     function spawnFood(scene) {
         let x, y;
         do {
-            x = Phaser.Math.Between(1, GRID_SIZE - 2) * CELL_SIZE;
-            y = Phaser.Math.Between(1, GRID_SIZE - 2) * CELL_SIZE;
+            x = Phaser.Math.Between(2, GRID_SIZE - 3) * CELL_SIZE;
+            y = Phaser.Math.Between(2, GRID_SIZE - 3) * CELL_SIZE;
         } while (player.body.some(segment => segment.x === x && segment.y === y) ||
                  ai.body.some(segment => segment.x === x && segment.y === y));
-        food.x = x;
-        food.y = y;
+        food.x = x + CELL_SIZE / 2;
+        food.y = y + CELL_SIZE / 2;
     }
 
     function eatFood(snake) {
+        eatSound.play();
         if (snake === player) {
             playerScore += 10;
         } else {
@@ -197,9 +261,18 @@
     }
 
     function endGame(winner) {
+        gameOverSound.play();
+        gameState = 'gameOver';
         gameOver = true;
         game.scene.scenes[0].add.text(GAME_WIDTH/2, GAME_HEIGHT/2, `Game Over! ${winner} wins!`, 
             { fontSize: '32px', fill: '#fff' }).setOrigin(0.5);
+        restartButton = game.scene.scenes[0].add.text(GAME_WIDTH/2, GAME_HEIGHT * 3/4, 'Restart', 
+            { fontSize: '24px', fill: '#fff' })
+            .setOrigin(0.5)
+            .setInteractive()
+            .on('pointerdown', () => {
+                game.scene.scenes[0].scene.restart();
+            });
     }
     </script>
 </body>
