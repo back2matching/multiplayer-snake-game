@@ -22,7 +22,6 @@
         height: GAME_HEIGHT,
         backgroundColor: '#000000',
         scene: {
-            preload: preload,
             create: create,
             update: update
         }
@@ -37,31 +36,13 @@
     let aiScore = 0;
     let scoreText;
     let gameOver = false;
-    let startButton;
     let restartButton;
-    let eatSound;
-    let gameOverSound;
     let border;
-
-    function preload() {
-        this.load.audio('eat', 'data:audio/mpeg;base64,SUQzBAAAAAAAI1RTU0UAAAAPAAADTGF2ZjU4LjI5LjEwMAAAAAAAAAAAAAAA//tQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWGluZwAAAA8AAAACAAAFbgCenp6enp6enp6enp6enp6enp6enp6enp6enp6enp6enp6enp6enp6enp6enp6enp6e//////////////////////////////////////////////////////////////////8AAAAATGF2YzU4LjU0AAAAAAAAAAAAAAAAJAUAAAAAAAAABWgVbKAYAAAAAAD/+1DEAVMEAB4AAAAAAAA0gAAAABFISEbISEhI+QkJH//7UMQVAAzM7Uj0AAAgAAA0goAAAGbISPhI+EhIQhISEhISEhISEhISEn/+5DE04AAAAGkAAAAIAAANIAAAASEhISEhISEhISEhISEhISEhISEhISE');
-        this.load.audio('gameover', 'data:audio/mpeg;base64,SUQzBAAAAAAAI1RTU0UAAAAPAAADTGF2ZjU4LjI5LjEwMAAAAAAAAAAAAAAA//tQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWGluZwAAAA8AAAACAAAFbgCenp6enp6enp6enp6enp6enp6enp6enp6enp6enp6enp6enp6enp6enp6enp6enp6e//////////////////////////////////////////////////////////////////8AAAAATGF2YzU4LjU0AAAAAAAAAAAAAAAAJAUAAAAAAAAABWgVcKAYAAAAAAD/+1DEAVMEAB4AAAAAAAA0gAAAABFISEbISEhI+QkJH//7UMQVAAzM7Uj0AAAgAAA0goAAAGbISPhI+EhIQhISEhISEhISEhISEn/+5DE04AAAAGkAAAAIAAANIAAAASEhISEhISEhISEhISEhISEhISEhISE');
-    }
 
     function create() {
         console.log("Create function called");
         cursors = this.input.keyboard.createCursorKeys();
-        
-        eatSound = this.sound.add('eat');
-        gameOverSound = this.sound.add('gameover');
-        
         createMenu(this);
-        
-        this.input.on('pointerdown', function () {
-            if (game.sound.context.state === 'suspended') {
-                game.sound.context.resume();
-            }
-        });
     }
 
     function createMenu(scene) {
@@ -242,9 +223,6 @@
     }
 
     function eatFood(snake) {
-        if (game.sound.context.state === 'running') {
-            eatSound.play();
-        }
         if (snake === player) {
             playerScore += 10;
         } else {
@@ -264,9 +242,6 @@
     }
 
     function endGame(winner) {
-        if (game.sound.context.state === 'running') {
-            gameOverSound.play();
-        }
         gameState = 'gameOver';
         gameOver = true;
         game.scene.scenes[0].add.text(GAME_WIDTH/2, GAME_HEIGHT/2, `Game Over! ${winner} wins!`, 
