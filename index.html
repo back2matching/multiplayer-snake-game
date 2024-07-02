@@ -24,15 +24,10 @@
     };
     firebase.initializeApp(firebaseConfig);
 
-    const GRID_SIZE = 40;
-    const CELL_SIZE = 15;
-    const GAME_WIDTH = GRID_SIZE * CELL_SIZE;
-    const GAME_HEIGHT = GRID_SIZE * CELL_SIZE;
-
     const config = {
         type: Phaser.AUTO,
-        width: GAME_WIDTH,
-        height: GAME_HEIGHT,
+        width: 600,
+        height: 450,
         scene: {
             preload: preload,
             create: create,
@@ -44,153 +39,57 @@
     let cursors;
     let player;
     let otherPlayer;
-    let foods = [];
-    let powerUps = [];
-    let obstacles;
-    let terrains;
+    let food;
     let gameId;
     let playerId;
-    let playerScore = 0;
-    let otherPlayerScore = 0;
-    let playerScoreText;
-    let otherPlayerScoreText;
-    let gameOver = false;
-    let gameMode = 'classic';
-    let powerUpActive = false;
-    let isNight = false;
-    let dayNightCycle;
-    let specialAbilityCooldown = 0;
-    let achievements = {};
-
-    const FOOD_TYPES = {
-        NORMAL: { color: 0xffffff, points: 1, effect: null },
-        SPEED: { color: 0x00ff00, points: 2, effect: 'speed' },
-        SLOW: { color: 0xff0000, points: 3, effect: 'slow' },
-        GHOST: { color: 0x0000ff, points: 5, effect: 'ghost' }
-    };
-
-    const TERRAIN_TYPES = {
-        NORMAL: { color: 0x000000, effect: null },
-        SPEED: { color: 0x00ff00, effect: 'speed' },
-        SLOW: { color: 0xff0000, effect: 'slow' },
-        TELEPORT: { color: 0x0000ff, effect: 'teleport' }
-    };
+    let scoreText;
 
     function preload() {
-        this.load.image('powerUp', 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAoAAAAKCAYAAACNMs+9AAAACXBIWXMAAAsTAAALEwEAmpwYAAAAIGNIUk0AAHolAACAgwAA+f8AAIDpAAB1MAAA6mAAADqYAAAXb5JfxUYAAAAmSURBVHjaYmRgYPj//z8DGmBiQAVMDFQGoxZSzUKQQnQZAPPTBtj9Z8k2AAAAAElFTkSuQmCC');
+        this.load.image('food', 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAoAAAAKCAYAAACNMs+9AAAACXBIWXMAAAsTAAALEwEAmpwYAAAAIGNIUk0AAHolAACAgwAA+f8AAIDpAAB1MAAA6mAAADqYAAAXb5JfxUYAAAAmSURBVHjaYmRgYPj//z8DGmBiQAVMDFQGoxZSzUKQQnQZAPPTBtj9Z8k2AAAAAElFTkSuQmCC');
     }
 
     function create() {
-        this.add.rectangle(GAME_WIDTH/2, GAME_HEIGHT/2, GAME_WIDTH, GAME_HEIGHT, 0x000000);
-        this.add.rectangle(GAME_WIDTH/2, GAME_HEIGHT/2, GAME_WIDTH-CELL_SIZE, GAME_HEIGHT-CELL_SIZE, 0xffff00).setStrokeStyle(CELL_SIZE, 0xffff00);
-
+        this.add.rectangle(300, 225, 600, 450, 0x000000);
         cursors = this.input.keyboard.createCursorKeys();
-        obstacles = this.add.group();
-        terrains = this.add.group();
-
-        player = {
-            body: [],
-            head: this.add.rectangle(0, 0, CELL_SIZE, CELL_SIZE, 0x00ff00),
-            specialAbility: 'speedBoost'
-        };
-        otherPlayer = {
-            body: [],
-            head: this.add.rectangle(0, 0, CELL_SIZE, CELL_SIZE, 0xff0000),
-            specialAbility: 'ghostMode'
-        };
-
-        playerScoreText = this.add.text(10, 10, 'You: 0', { fontSize: '16px', fill: '#00ff00' });
-        otherPlayerScoreText = this.add.text(10, 30, 'Opponent: 0', { fontSize: '16px', fill: '#ff0000' });
+        food = this.add.image(300, 225, 'food');
+        player = this.add.rectangle(100, 100, 20, 20, 0x00ff00);
+        otherPlayer = this.add.rectangle(500, 350, 20, 20, 0xff0000);
+        scoreText = this.add.text(16, 16, 'Score: 0', { fontSize: '32px', fill: '#fff' });
 
         gameId = prompt("Enter game ID to join, or leave blank to create new game:");
         if (!gameId) {
             gameId = Math.random().toString(36).substring(2, 15);
             alert("Your game ID is: " + gameId);
-            gameMode = prompt("Enter game mode (classic, terrain, or chaos):");
         }
 
         playerId = Math.random().toString(36).substring(2, 15);
 
         const gameRef = firebase.database().ref('games/' + gameId);
         gameRef.child('players').child(playerId).set({
-            x: Math.floor(GRID_SIZE/4) * CELL_SIZE,
-            y: Math.floor(GRID_SIZE/2) * CELL_SIZE,
-            dx: CELL_SIZE,
-            dy: 0,
-            score: 0,
-            body: [],
-            specialAbility: player.specialAbility
+            x: player.x,
+            y: player.y,
+            score: 0
         });
 
         gameRef.child('players').on('value', (snapshot) => {
             snapshot.forEach((childSnapshot) => {
                 const playerData = childSnapshot.val();
-                if (childSnapshot.key === playerId) {
-                    updateSnake(player, playerData);
-                    playerScore = playerData.score;
-                    playerScoreText.setText('You: ' + playerScore);
-                } else {
-                    updateSnake(otherPlayer, playerData);
-                    otherPlayerScore = playerData.score;
-                    otherPlayerScoreText.setText('Opponent: ' + otherPlayerScore);
+                if (childSnapshot.key !== playerId) {
+                    otherPlayer.x = playerData.x;
+                    otherPlayer.y = playerData.y;
                 }
             });
         });
 
-        gameRef.child('foods').on('value', (snapshot) => {
-            foods.forEach(food => food.destroy());
-            foods = [];
-            snapshot.forEach((childSnapshot) => {
-                const foodData = childSnapshot.val();
-                const food = this.add.rectangle(foodData.x, foodData.y, CELL_SIZE, CELL_SIZE, FOOD_TYPES[foodData.type].color);
-                food.type = foodData.type;
-                foods.push(food);
-            });
-        });
-
-        gameRef.child('powerUps').on('value', (snapshot) => {
-            powerUps.forEach(powerUp => powerUp.destroy());
-            powerUps = [];
-            snapshot.forEach((childSnapshot) => {
-                const powerUpData = childSnapshot.val();
-                const powerUp = this.add.image(powerUpData.x, powerUpData.y, 'powerUp').setScale(1.5);
-                powerUp.type = powerUpData.type;
-                powerUps.push(powerUp);
-            });
-        });
-
-        gameRef.child('obstacles').on('value', (snapshot) => {
-            obstacles.clear(true, true);
-            snapshot.forEach((childSnapshot) => {
-                const obstacleData = childSnapshot.val();
-                obstacles.add(this.add.rectangle(obstacleData.x, obstacleData.y, CELL_SIZE, CELL_SIZE, 0x808080));
-            });
-        });
-
-        gameRef.child('terrains').on('value', (snapshot) => {
-            terrains.clear(true, true);
-            snapshot.forEach((childSnapshot) => {
-                const terrainData = childSnapshot.val();
-                const terrain = this.add.rectangle(terrainData.x, terrainData.y, CELL_SIZE, CELL_SIZE, TERRAIN_TYPES[terrainData.type].color);
-                terrain.type = terrainData.type;
-                terrains.add(terrain);
-            });
-        });
-
-        gameRef.child('gameMode').once('value', (snapshot) => {
-            gameMode = snapshot.val() || 'classic';
-            if (gameMode === 'terrain') {
-                createTerrains();
-            } else if (gameMode === 'chaos') {
-                createObstacles();
-                createTerrains();
+        gameRef.child('food').on('value', (snapshot) => {
+            const foodData = snapshot.val();
+            if (foodData) {
+                food.x = foodData.x;
+                food.y = foodData.y;
             }
         });
 
-        gameRef.child('isNight').on('value', (snapshot) => {
-            isNight = snapshot.val();
-            updateDayNightCycle(this);
-        });
+        spawnFood();
 
         gameRef.child('chat').on('child_added', (snapshot) => {
             const message = snapshot.val();
@@ -203,7 +102,7 @@
             if (e.key === 'Enter') {
                 const message = this.value;
                 if (message) {
-                    firebase.database().ref('games/' + gameId + '/chat').push({
+                    gameRef.child('chat').push({
                         sender: playerId,
                         text: message
                     });
@@ -211,135 +110,43 @@
                 }
             }
         });
-
-        spawnFoods();
-        spawnPowerUp();
-
-        this.time.addEvent({
-            delay: 150,
-            callback: moveSnake,
-            callbackScope: this,
-            loop: true
-        });
-
-        dayNightCycle = this.time.addEvent({
-            delay: 30000, // 30 seconds
-            callback: toggleDayNight,
-            callbackScope: this,
-            loop: true
-        });
-
-        this.input.keyboard.on('keydown-SPACE', activateSpecialAbility);
     }
 
     function update() {
-        if (gameOver) return;
-
-        if (cursors.left.isDown && player.head.dx === 0) {
-            updatePlayerDirection(-CELL_SIZE, 0);
-        } else if (cursors.right.isDown && player.head.dx === 0) {
-            updatePlayerDirection(CELL_SIZE, 0);
-        } else if (cursors.up.isDown && player.head.dy === 0) {
-            updatePlayerDirection(0, -CELL_SIZE);
-        } else if (cursors.down.isDown && player.head.dy === 0) {
-            updatePlayerDirection(0, CELL_SIZE);
+        if (cursors.left.isDown) {
+            player.x -= 3;
+        } else if (cursors.right.isDown) {
+            player.x += 3;
         }
 
-        if (specialAbilityCooldown > 0) {
-            specialAbilityCooldown--;
+        if (cursors.up.isDown) {
+            player.y -= 3;
+        } else if (cursors.down.isDown) {
+            player.y += 3;
         }
-    }
-
-    function moveSnake() {
-        if (gameOver) return;
-
-        const newX = player.head.x + player.head.dx;
-        const newY = player.head.y + player.head.dy;
-
-        if (checkCollision(newX, newY)) {
-            gameOver = true;
-            alert('Game Over! Your score: ' + playerScore);
-            return;
-        }
-
-        // Move body
-        for (let i = player.body.length - 1; i > 0; i--) {
-            player.body[i].x = player.body[i-1].x;
-            player.body[i].y = player.body[i-1].y;
-        }
-        if (player.body.length > 0) {
-            player.body[0].x = player.head.x;
-            player.body[0].y = player.head.y;
-        }
-
-        // Move head
-        player.head.x = newX;
-        player.head.y = newY;
 
         firebase.database().ref('games/' + gameId + '/players/' + playerId).update({
-            x: player.head.x,
-            y: player.head.y,
-            body: player.body.map(segment => ({x: segment.x, y: segment.y}))
+            x: player.x,
+            y: player.y
         });
 
-        checkFoodCollision();
-        checkPowerUpCollision();
-        checkTerrainEffect();
-    }
-
-    function updatePlayerDirection(dx, dy) {
-        player.head.dx = dx;
-        player.head.dy = dy;
-        firebase.database().ref('games/' + gameId + '/players/' + playerId).update({
-            dx: dx,
-            dy: dy
-        });
-    }
-
-    function checkCollision(x, y) {
-        // Wall collision
-        if (x < CELL_SIZE || x >= GAME_WIDTH - CELL_SIZE || y < CELL_SIZE || y >= GAME_HEIGHT - CELL_SIZE) {
-            return true;
-        }
-
-        // Self collision
-        if (player.body.some(segment => segment.x === x && segment.y === y)) {
-            return true;
-        }
-
-        // Other player collision
-        if (otherPlayer.head.x === x && otherPlayer.head.y === y) {
-            return true;
-        }
-
-        // Obstacle collision
-        if (obstacles.getChildren().some(obs => obs.x === x && obs.y === y)) {
-            return !powerUpActive; // Ghost mode allows passing through obstacles
-        }
-
-        return false;
-    }
-
-    function checkFoodCollision() {
-        const collidedFood = foods.find(food => food.x === player.head.x && food.y === player.head.y);
-        if (collidedFood) {
-            eatFood(collidedFood);
+        if (Phaser.Geom.Intersects.RectangleToRectangle(player.getBounds(), food.getBounds())) {
+            eatFood();
         }
     }
 
-    function eatFood(food) {
-        playerScore += FOOD_TYPES[food.type].points;
-        firebase.database().ref('games/' + gameId + '/players/' + playerId).update({
-            score: playerScore
-        });
+    function spawnFood() {
+        const x = Math.floor(Math.random() * 580) + 10;
+        const y = Math.floor(Math.random() * 430) + 10;
+        firebase.database().ref('games/' + gameId + '/food').set({ x, y });
+    }
 
-        // Grow snake
-        const newSegment = game.scene.scenes[0].add.rectangle(
-            player.body.length > 0 ? player.body[player.body.length-1].x : player.head.x,
-            player.body.length > 0 ? player.body[player.body.length-1].y : player.head.y,
-            CELL_SIZE, CELL_SIZE, 0x00ff00
-        );
-        player.body.push(newSegment);
-
-        // Apply food effect
-        if (FOOD_TYPES[food.type].effect) {
+    function eatFood() {
+        let score = parseInt(scoreText.text.split(': ')[1]) + 10;
+        scoreText.setText('Score: ' + score);
+        firebase.database().ref('games/' + gameId + '/players/' + playerId).update({ score: score });
+        spawnFood();
+    }
+    </script>
+</body>
+</html>
