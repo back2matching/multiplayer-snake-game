@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <script src="https://cdn.jsdelivr.net/npm/phaser@3.55.2/dist/phaser.min.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
+</head>
+<body>
+    <script>
+    // Initialize Firebase (replace with your own config)
+    const firebaseConfig = {
+      apiKey: "AIzaSyA-PdosVTGoJ1MTL3xD3XybhHJc7buUjDo",
+      authDomain: "multiplayersnakegame.firebaseapp.com",
+      projectId: "multiplayersnakegame",
+      storageBucket: "multiplayersnakegame.appspot.com",
+      messagingSenderId: "954908084436",
+      appId: "1:954908084436:web:0ac77cc7cecbdd30ed9341"
+    };
+    firebase.initializeApp(firebaseConfig);
+
+    const config = {
+        type: Phaser.AUTO,
+        width: 800,
+        height: 600,
+        scene: {
+            preload: preload,
+            create: create,
+            update: update
+        }
+    };
+
+    const game = new Phaser.Game(config);
+    let cursors;
+    let player;
+    let otherPlayer;
+    let food;
+    let gameId;
+    let playerId;
+
+    function preload() {
+        this.load.image('food', 'https://labs.phaser.io/assets/particles/red.png');
+    }
+
+    function create() {
+        cursors = this.input.keyboard.createCursorKeys();
+        food = this.add.image(400, 300, 'food');
+        player = this.add.rectangle(100, 100, 32, 32, 0x00ff00);
+        otherPlayer = this.add.rectangle(700, 500, 32, 32, 0xff0000);
+
+        // Generate or join game
+        gameId = prompt("Enter game ID to join, or leave blank to create new game:");
+        if (!gameId) {
+            gameId = Math.random().toString(36).substring(2, 15);
+            alert("Your game ID is: " + gameId);
+        }
+
+        playerId = Math.random().toString(36).substring(2, 15);
+
+        // Set up Firebase listeners
+        const gameRef = firebase.database().ref('games/' + gameId);
+        gameRef.child('players').child(playerId).set({
+            x: player.x,
+            y: player.y
+        });
+
+        gameRef.child('players').on('value', (snapshot) => {
+            snapshot.forEach((childSnapshot) => {
+                if (childSnapshot.key !== playerId) {
+                    otherPlayer.x = childSnapshot.val().x;
+                    otherPlayer.y = childSnapshot.val().y;
+                }
+            });
+        });
+
+        gameRef.child('food').on('value', (snapshot) => {
+            food.x = snapshot.val().x;
+            food.y = snapshot.val().y;
+        });
+
+        // Initialize food position
+        gameRef.child('food').set({
+            x: Phaser.Math.Between(0, 800),
+            y: Phaser.Math.Between(0, 600)
+        });
+    }
+
+    function update() {
+        if (cursors.left.isDown) {
+            player.x -= 5;
+        } else if (cursors.right.isDown) {
+            player.x += 5;
+        }
+
+        if (cursors.up.isDown) {
+            player.y -= 5;
+        } else if (cursors.down.isDown) {
+            player.y += 5;
+        }
+
+        // Update player position in Firebase
+        firebase.database().ref('games/' + gameId + '/players/' + playerId).set({
+            x: player.x,
+            y: player.y
+        });
+
+        // Check for food collision
+        if (Phaser.Geom.Intersects.RectangleToRectangle(player.getBounds(), food.getBounds())) {
+            firebase.database().ref('games/' + gameId + '/food').set({
+                x: Phaser.Math.Between(0, 800),
+                y: Phaser.Math.Between(0, 600)
+            });
+        }
+    }
+    </script>
+</body>
+</html>
