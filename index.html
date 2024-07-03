@@ -1,6 +1,9 @@
 <!DOCTYPE html>
 <html>
 <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Snake vs AI</title>
     <script src="https://cdn.jsdelivr.net/npm/phaser@3.55.2/dist/phaser.min.js"></script>
     <style>
         body { margin: 0; display: flex; justify-content: center; align-items: center; height: 100vh; background-color: #f0f0f0; }
@@ -8,330 +11,333 @@
 </head>
 <body>
     <script>
-    const GRID_SIZE = 20;
-    const CELL_SIZE = 20;
-    const GAME_WIDTH = GRID_SIZE * CELL_SIZE;
-    const GAME_HEIGHT = GRID_SIZE * CELL_SIZE;
-    const MOVE_INTERVAL = 200; // Fixed move interval
+    try {
+        const GRID_SIZE = 20;
+        const CELL_SIZE = 20;
+        const GAME_WIDTH = GRID_SIZE * CELL_SIZE;
+        const GAME_HEIGHT = GRID_SIZE * CELL_SIZE;
+        const MOVE_INTERVAL = 200; // Fixed move interval
 
-    let gameState = 'menu';
-    let aiDifficulty = 'medium';
-    let selectedDifficulty = 1; // 0: Easy, 1: Medium, 2: Hard
+        let gameState = 'menu';
+        let aiDifficulty = 'medium';
+        let selectedDifficulty = 1; // 0: Easy, 1: Medium, 2: Hard
 
-    const config = {
-        type: Phaser.AUTO,
-        width: GAME_WIDTH,
-        height: GAME_HEIGHT,
-        backgroundColor: '#000000',
-        scene: {
-            create: create,
-            update: update
+        const config = {
+            type: Phaser.AUTO,
+            width: GAME_WIDTH,
+            height: GAME_HEIGHT,
+            backgroundColor: '#000000',
+            scene: {
+                create: create,
+                update: update
+            }
+        };
+
+        const game = new Phaser.Game(config);
+        let cursors;
+        let player;
+        let ai;
+        let food;
+        let playerScore = 0;
+        let aiScore = 0;
+        let scoreText;
+        let gameOver = false;
+        let restartButton;
+        let border;
+        let difficultyTexts = [];
+        let highScore = 0;
+        let highScoreText;
+        let lastMoveTime = 0;
+
+        function create() {
+            cursors = this.input.keyboard.createCursorKeys();
+            createMenu(this);
         }
-    };
 
-    const game = new Phaser.Game(config);
-    let cursors;
-    let player;
-    let ai;
-    let food;
-    let playerScore = 0;
-    let aiScore = 0;
-    let scoreText;
-    let gameOver = false;
-    let restartButton;
-    let border;
-    let difficultyTexts = [];
-    let highScore = 0;
-    let highScoreText;
-    let moveEvent;
-    let lastMoveTime = 0;
+        function createMenu(scene) {
+            scene.add.text(GAME_WIDTH/2, GAME_HEIGHT/6, 'Snake vs AI', { fontSize: '32px', fill: '#ffffff' }).setOrigin(0.5);
+            
+            const difficulties = ['Easy', 'Medium', 'Hard'];
+            const spacing = GAME_WIDTH / 4;
 
-    function create() {
-        cursors = this.input.keyboard.createCursorKeys();
-        createMenu(this);
-    }
+            difficulties.forEach((difficulty, index) => {
+                let textObject = scene.add.text(
+                    (index + 1) * spacing, 
+                    GAME_HEIGHT/2, 
+                    difficulty, 
+                    { fontSize: '20px', fill: '#ffffff' }
+                )
+                .setOrigin(0.5)
+                .setInteractive()
+                .on('pointerdown', () => { 
+                    aiDifficulty = difficulty.toLowerCase();
+                    startGame(scene);
+                });
+                difficultyTexts.push(textObject);
+            });
 
-    function createMenu(scene) {
-        scene.add.text(GAME_WIDTH/2, GAME_HEIGHT/6, 'Snake vs AI', { fontSize: '32px', fill: '#ffffff' }).setOrigin(0.5);
-        
-        const difficulties = ['Easy', 'Medium', 'Hard'];
-        const spacing = GAME_WIDTH / 4;
+            updateSelectedDifficulty(scene);
 
-        difficulties.forEach((difficulty, index) => {
-            let textObject = scene.add.text(
-                (index + 1) * spacing, 
-                GAME_HEIGHT/2, 
-                difficulty, 
-                { fontSize: '20px', fill: '#ffffff' }
-            )
-            .setOrigin(0.5)
-            .setInteractive()
-            .on('pointerdown', () => { 
-                aiDifficulty = difficulty.toLowerCase();
+            scene.input.keyboard.on('keydown-ENTER', () => {
+                aiDifficulty = difficulties[selectedDifficulty].toLowerCase();
                 startGame(scene);
             });
-            difficultyTexts.push(textObject);
-        });
 
-        updateSelectedDifficulty(scene);
+            highScoreText = scene.add.text(GAME_WIDTH/2, GAME_HEIGHT * 5/6, `High Score: ${highScore}`, { fontSize: '18px', fill: '#ffffff' }).setOrigin(0.5);
 
-        scene.input.keyboard.on('keydown-ENTER', () => {
-            aiDifficulty = difficulties[selectedDifficulty].toLowerCase();
-            startGame(scene);
-        });
+            scene.add.text(GAME_WIDTH/2, GAME_HEIGHT * 3/4, 'Use arrow keys to select difficulty', { fontSize: '14px', fill: '#888888' }).setOrigin(0.5);
+            scene.add.text(GAME_WIDTH/2, GAME_HEIGHT * 3/4 + 20, 'Press ENTER to start', { fontSize: '14px', fill: '#888888' }).setOrigin(0.5);
+        }
 
-        highScoreText = scene.add.text(GAME_WIDTH/2, GAME_HEIGHT * 5/6, `High Score: ${highScore}`, { fontSize: '18px', fill: '#ffffff' }).setOrigin(0.5);
+        function updateSelectedDifficulty(scene) {
+            difficultyTexts.forEach((text, index) => {
+                if (index === selectedDifficulty) {
+                    text.setColor('#ffff00');
+                    text.setStyle({ fontSize: '24px' });
+                } else {
+                    text.setColor('#ffffff');
+                    text.setStyle({ fontSize: '20px' });
+                }
+            });
+        }
 
-        scene.add.text(GAME_WIDTH/2, GAME_HEIGHT * 3/4, 'Use arrow keys to select difficulty', { fontSize: '14px', fill: '#888888' }).setOrigin(0.5);
-        scene.add.text(GAME_WIDTH/2, GAME_HEIGHT * 3/4 + 20, 'Press ENTER to start', { fontSize: '14px', fill: '#888888' }).setOrigin(0.5);
-    }
+        function startGame(scene) {
+            gameState = 'playing';
+            playerScore = 0;
+            aiScore = 0;
+            gameOver = false;
+            lastMoveTime = 0;
 
-    function updateSelectedDifficulty(scene) {
-        difficultyTexts.forEach((text, index) => {
-            if (index === selectedDifficulty) {
-                text.setColor('#ffff00');
-                text.setStyle({ fontSize: '24px' });
-            } else {
-                text.setColor('#ffffff');
-                text.setStyle({ fontSize: '20px' });
+            scene.children.removeAll();
+
+            border = scene.add.group();
+            for (let x = 0; x < GRID_SIZE; x++) {
+                for (let y = 0; y < GRID_SIZE; y++) {
+                    if (x === 0 || x === GRID_SIZE - 1 || y === 0 || y === GRID_SIZE - 1) {
+                        border.add(scene.add.rectangle(x * CELL_SIZE + CELL_SIZE / 2, y * CELL_SIZE + CELL_SIZE / 2, CELL_SIZE, CELL_SIZE, 0xffff00));
+                    }
+                }
             }
-        });
-    }
+            
+            player = {
+                body: [scene.add.rectangle(CELL_SIZE * 5 + CELL_SIZE / 2, CELL_SIZE * 10 + CELL_SIZE / 2, CELL_SIZE, CELL_SIZE, 0x00ff00)],
+                direction: {x: 1, y: 0},
+                nextDirection: {x: 1, y: 0},
+                queuedDirection: null
+            };
 
-    function startGame(scene) {
-        gameState = 'playing';
-        playerScore = 0;
-        aiScore = 0;
-        gameOver = false;
-        lastMoveTime = 0;
+            ai = {
+                body: [scene.add.rectangle(CELL_SIZE * 15 + CELL_SIZE / 2, CELL_SIZE * 10 + CELL_SIZE / 2, CELL_SIZE, CELL_SIZE, 0xff0000)],
+                direction: {x: -1, y: 0}
+            };
 
-        scene.children.removeAll();
+            food = scene.add.rectangle(0, 0, CELL_SIZE * 0.8, CELL_SIZE * 0.8, 0xffffff);
+            spawnFood(scene);
 
-        border = scene.add.group();
-        for (let x = 0; x < GRID_SIZE; x++) {
-            for (let y = 0; y < GRID_SIZE; y++) {
-                if (x === 0 || x === GRID_SIZE - 1 || y === 0 || y === GRID_SIZE - 1) {
-                    border.add(scene.add.rectangle(x * CELL_SIZE + CELL_SIZE / 2, y * CELL_SIZE + CELL_SIZE / 2, CELL_SIZE, CELL_SIZE, 0xffff00));
+            scoreText = scene.add.text(16, 16, 'Player: 0  AI: 0', { fontSize: '16px', fill: '#ffffff' });
+
+            // Make food flash
+            scene.tweens.add({
+                targets: food,
+                alpha: 0,
+                duration: 500,
+                ease: 'Power2',
+                yoyo: true,
+                repeat: -1
+            });
+        }
+
+        function update(time) {
+            if (gameState === 'menu') {
+                if (cursors.left.isDown && cursors.left.getDuration() < 50) {
+                    selectedDifficulty = (selectedDifficulty - 1 + 3) % 3;
+                    updateSelectedDifficulty(this);
+                } else if (cursors.right.isDown && cursors.right.getDuration() < 50) {
+                    selectedDifficulty = (selectedDifficulty + 1) % 3;
+                    updateSelectedDifficulty(this);
+                }
+            } else if (gameState === 'playing') {
+                handleInput();
+                
+                if (time - lastMoveTime >= MOVE_INTERVAL) {
+                    moveSnakes();
+                    lastMoveTime = time;
                 }
             }
         }
-        
-        player = {
-            body: [scene.add.rectangle(CELL_SIZE * 5 + CELL_SIZE / 2, CELL_SIZE * 10 + CELL_SIZE / 2, CELL_SIZE, CELL_SIZE, 0x00ff00)],
-            direction: {x: 1, y: 0},
-            nextDirection: {x: 1, y: 0},
-            queuedDirection: null
-        };
 
-        ai = {
-            body: [scene.add.rectangle(CELL_SIZE * 15 + CELL_SIZE / 2, CELL_SIZE * 10 + CELL_SIZE / 2, CELL_SIZE, CELL_SIZE, 0xff0000)],
-            direction: {x: -1, y: 0}
-        };
+        function handleInput() {
+            let newDirection = null;
+            if (cursors.left.isDown && player.direction.x !== 1) newDirection = {x: -1, y: 0};
+            else if (cursors.right.isDown && player.direction.x !== -1) newDirection = {x: 1, y: 0};
+            else if (cursors.up.isDown && player.direction.y !== 1) newDirection = {x: 0, y: -1};
+            else if (cursors.down.isDown && player.direction.y !== -1) newDirection = {x: 0, y: 1};
 
-        food = scene.add.rectangle(0, 0, CELL_SIZE * 0.8, CELL_SIZE * 0.8, 0xffffff);
-        spawnFood(scene);
-
-        scoreText = scene.add.text(16, 16, 'Player: 0  AI: 0', { fontSize: '16px', fill: '#ffffff' });
-
-        // Make food flash
-        scene.tweens.add({
-            targets: food,
-            alpha: 0,
-            duration: 500,
-            ease: 'Power2',
-            yoyo: true,
-            repeat: -1
-        });
-    }
-
-    function update(time) {
-        if (gameState === 'menu') {
-            if (cursors.left.isDown && cursors.left.getDuration() < 50) {
-                selectedDifficulty = (selectedDifficulty - 1 + 3) % 3;
-                updateSelectedDifficulty(this);
-            } else if (cursors.right.isDown && cursors.right.getDuration() < 50) {
-                selectedDifficulty = (selectedDifficulty + 1) % 3;
-                updateSelectedDifficulty(this);
-            }
-        } else if (gameState === 'playing') {
-            handleInput();
-            
-            if (time - lastMoveTime >= MOVE_INTERVAL) {
-                moveSnakes();
-                lastMoveTime = time;
+            if (newDirection) {
+                if (player.nextDirection.x !== player.direction.x || player.nextDirection.y !== player.direction.y) {
+                    player.queuedDirection = newDirection;
+                } else {
+                    player.nextDirection = newDirection;
+                }
             }
         }
-    }
 
-    function handleInput() {
-        let newDirection = null;
-        if (cursors.left.isDown && player.direction.x !== 1) newDirection = {x: -1, y: 0};
-        else if (cursors.right.isDown && player.direction.x !== -1) newDirection = {x: 1, y: 0};
-        else if (cursors.up.isDown && player.direction.y !== 1) newDirection = {x: 0, y: -1};
-        else if (cursors.down.isDown && player.direction.y !== -1) newDirection = {x: 0, y: 1};
+        function moveSnakes() {
+            if (gameState !== 'playing') return;
 
-        if (newDirection) {
-            if (player.nextDirection.x !== player.direction.x || player.nextDirection.y !== player.direction.y) {
-                player.queuedDirection = newDirection;
+            player.direction = player.nextDirection;
+            if (player.queuedDirection) {
+                player.nextDirection = player.queuedDirection;
+                player.queuedDirection = null;
+            }
+            moveSnake(player);
+            if (checkCollision(player)) {
+                endGame("AI");
+                return;
+            }
+
+            moveAI();
+            moveSnake(ai);
+            if (checkCollision(ai)) {
+                endGame("Player");
+                return;
+            }
+
+            checkFoodCollision();
+        }
+
+        function moveSnake(snake) {
+            let x = snake.body[0].x + snake.direction.x * CELL_SIZE;
+            let y = snake.body[0].y + snake.direction.y * CELL_SIZE;
+
+            for (let i = snake.body.length - 1; i > 0; i--) {
+                snake.body[i].x = snake.body[i-1].x;
+                snake.body[i].y = snake.body[i-1].y;
+            }
+
+            snake.body[0].x = x;
+            snake.body[0].y = y;
+        }
+
+        function moveAI() {
+            let dx = food.x - ai.body[0].x;
+            let dy = food.y - ai.body[0].y;
+
+            if (Math.random() < getAIDifficultyChance()) {
+                if (Math.abs(dx) > Math.abs(dy)) {
+                    ai.direction = {x: dx > 0 ? 1 : -1, y: 0};
+                } else {
+                    ai.direction = {x: 0, y: dy > 0 ? 1 : -1};
+                }
             } else {
-                player.nextDirection = newDirection;
-            }
-        }
-    }
-
-    function moveSnakes() {
-        if (gameState !== 'playing') return;
-
-        player.direction = player.nextDirection;
-        if (player.queuedDirection) {
-            player.nextDirection = player.queuedDirection;
-            player.queuedDirection = null;
-        }
-        moveSnake(player);
-        if (checkCollision(player)) {
-            endGame("AI");
-            return;
-        }
-
-        moveAI();
-        moveSnake(ai);
-        if (checkCollision(ai)) {
-            endGame("Player");
-            return;
-        }
-
-        checkFoodCollision();
-    }
-
-    function moveSnake(snake) {
-        let x = snake.body[0].x + snake.direction.x * CELL_SIZE;
-        let y = snake.body[0].y + snake.direction.y * CELL_SIZE;
-
-        for (let i = snake.body.length - 1; i > 0; i--) {
-            snake.body[i].x = snake.body[i-1].x;
-            snake.body[i].y = snake.body[i-1].y;
-        }
-
-        snake.body[0].x = x;
-        snake.body[0].y = y;
-    }
-
-    function moveAI() {
-        let dx = food.x - ai.body[0].x;
-        let dy = food.y - ai.body[0].y;
-
-        if (Math.random() < getAIDifficultyChance()) {
-            if (Math.abs(dx) > Math.abs(dy)) {
-                ai.direction = {x: dx > 0 ? 1 : -1, y: 0};
-            } else {
-                ai.direction = {x: 0, y: dy > 0 ? 1 : -1};
-            }
-        } else {
-            let directions = [{x: 1, y: 0}, {x: -1, y: 0}, {x: 0, y: 1}, {x: 0, y: -1}];
-            ai.direction = directions[Math.floor(Math.random() * directions.length)];
-        }
-
-        let nextX = ai.body[0].x + ai.direction.x * CELL_SIZE;
-        let nextY = ai.body[0].y + ai.direction.y * CELL_SIZE;
-        if (nextX <= CELL_SIZE || nextX >= GAME_WIDTH - CELL_SIZE || 
-            nextY <= CELL_SIZE || nextY >= GAME_HEIGHT - CELL_SIZE ||
-            ai.body.some((segment, index) => index > 0 && segment.x === nextX && segment.y === nextY)) {
-            let directions = [{x: 1, y: 0}, {x: -1, y: 0}, {x: 0, y: 1}, {x: 0, y: -1}];
-            directions = directions.filter(dir => 
-                !(nextX + dir.x * CELL_SIZE <= CELL_SIZE || nextX + dir.x * CELL_SIZE >= GAME_WIDTH - CELL_SIZE || 
-                nextY + dir.y * CELL_SIZE <= CELL_SIZE || nextY + dir.y * CELL_SIZE >= GAME_HEIGHT - CELL_SIZE)
-            );
-            if (directions.length > 0) {
+                let directions = [{x: 1, y: 0}, {x: -1, y: 0}, {x: 0, y: 1}, {x: 0, y: -1}];
                 ai.direction = directions[Math.floor(Math.random() * directions.length)];
             }
-        }
-    }
 
-    function getAIDifficultyChance() {
-        switch(aiDifficulty) {
-            case 'easy': return 0.3;
-            case 'medium': return 0.6;
-            case 'hard': return 0.9;
-            default: return 0.6;
-        }
-    }
-
-    function checkCollision(snake) {
-        let head = snake.body[0];
-        if (head.x <= CELL_SIZE || head.x >= GAME_WIDTH - CELL_SIZE || 
-            head.y <= CELL_SIZE || head.y >= GAME_HEIGHT - CELL_SIZE) {
-            return true;
-        }
-        for (let i = 1; i < snake.body.length; i++) {
-            if (head.x === snake.body[i].x && head.y === snake.body[i].y) {
-                return true;
+            let nextX = ai.body[0].x + ai.direction.x * CELL_SIZE;
+            let nextY = ai.body[0].y + ai.direction.y * CELL_SIZE;
+            if (nextX <= CELL_SIZE || nextX >= GAME_WIDTH - CELL_SIZE || 
+                nextY <= CELL_SIZE || nextY >= GAME_HEIGHT - CELL_SIZE ||
+                ai.body.some((segment, index) => index > 0 && segment.x === nextX && segment.y === nextY)) {
+                let directions = [{x: 1, y: 0}, {x: -1, y: 0}, {x: 0, y: 1}, {x: 0, y: -1}];
+                directions = directions.filter(dir => 
+                    !(nextX + dir.x * CELL_SIZE <= CELL_SIZE || nextX + dir.x * CELL_SIZE >= GAME_WIDTH - CELL_SIZE || 
+                    nextY + dir.y * CELL_SIZE <= CELL_SIZE || nextY + dir.y * CELL_SIZE >= GAME_HEIGHT - CELL_SIZE)
+                );
+                if (directions.length > 0) {
+                    ai.direction = directions[Math.floor(Math.random() * directions.length)];
+                }
             }
         }
-        let otherSnake = snake === player ? ai : player;
-        return otherSnake.body.some(segment => head.x === segment.x && head.y === segment.y);
-    }
 
-    function checkFoodCollision() {
-        if (player.body[0].x === food.x && player.body[0].y === food.y) {
-            eatFood(player);
-        } else if (ai.body[0].x === food.x && ai.body[0].y === food.y) {
-            eatFood(ai);
+        function getAIDifficultyChance() {
+            switch(aiDifficulty) {
+                case 'easy': return 0.3;
+                case 'medium': return 0.6;
+                case 'hard': return 0.9;
+                default: return 0.6;
+            }
         }
-    }
 
-    function spawnFood(scene) {
-        let x, y;
-        do {
-            x = Phaser.Math.Between(1, GRID_SIZE - 2) * CELL_SIZE + CELL_SIZE / 2;
-            y = Phaser.Math.Between(1, GRID_SIZE - 2) * CELL_SIZE + CELL_SIZE / 2;
-        } while (player.body.some(segment => segment.x === x && segment.y === y) ||
-                 ai.body.some(segment => segment.x === x && segment.y === y));
-        food.x = x;
-        food.y = y;
-    }
-
-    function eatFood(snake) {
-        if (snake === player) {
-            playerScore += 10;
-        } else {
-            aiScore += 10;
+        function checkCollision(snake) {
+            let head = snake.body[0];
+            if (head.x <= CELL_SIZE || head.x >= GAME_WIDTH - CELL_SIZE || 
+                head.y <= CELL_SIZE || head.y >= GAME_HEIGHT - CELL_SIZE) {
+                return true;
+            }
+            for (let i = 1; i < snake.body.length; i++) {
+                if (head.x === snake.body[i].x && head.y === snake.body[i].y) {
+                    return true;
+                }
+            }
+            let otherSnake = snake === player ? ai : player;
+            return otherSnake.body.some(segment => head.x === segment.x && head.y === segment.y);
         }
-        scoreText.setText(`Player: ${playerScore}  AI: ${aiScore}`);
 
-        let tail = snake.body[snake.body.length - 1];
-        let newSegment = game.scene.scenes[0].add.rectangle(
-            tail.x, tail.y, 
-            CELL_SIZE, CELL_SIZE, 
-            snake === player ? 0x00ff00 : 0xff0000
-        );
-        snake.body.push(newSegment);
-
-        spawnFood(game.scene.scenes[0]);
-    }
-
-    function endGame(winner) {
-        gameState = 'gameOver';
-        gameOver = true;
-        if (playerScore > highScore) {
-            highScore = playerScore;
+        function checkFoodCollision() {
+            if (player.body[0].x === food.x && player.body[0].y === food.y) {
+                eatFood(player);
+            } else if (ai.body[0].x === food.x && ai.body[0].y === food.y) {
+                eatFood(ai);
+            }
         }
-        let scene = game.scene.scenes[0];
-        scene.add.rectangle(GAME_WIDTH/2, GAME_HEIGHT/2, GAME_WIDTH * 0.7, GAME_HEIGHT * 0.5, 0x000000, 0.8).setOrigin(0.5);
-        scene.add.text(GAME_WIDTH/2, GAME_HEIGHT/2 - 60, `Game Over! ${winner} wins!`, 
-            { fontSize: '24px', fill: '#ffffff' }).setOrigin(0.5);
-        scene.add.text(GAME_WIDTH/2, GAME_HEIGHT/2 - 20, `Your Score: ${playerScore}`, 
-            { fontSize: '20px', fill: '#ffffff' }).setOrigin(0.5);
-        scene.add.text(GAME_WIDTH/2, GAME_HEIGHT/2 + 20, `High Score: ${highScore}`, 
-            { fontSize: '20px', fill: '#ffffff' }).setOrigin(0.5);
-        restartButton = scene.add.text(GAME_WIDTH/2, GAME_HEIGHT/2 + 60, 'Restart', 
-            { fontSize: '20px', fill: '#ffffff' })
-            .setOrigin(0.5)restartButton = scene.add.text(GAME_WIDTH/2, GAME_HEIGHT/2 + 60, 'Restart', 
-            { fontSize: '20px', fill: '#ffffff' })
-            .setOrigin(0.5)
-            .setInteractive()
-            .on('pointerdown', () => {
-                scene.scene.restart();
-            });
+
+        function spawnFood(scene) {
+            let x, y;
+            do {
+                x = Phaser.Math.Between(1, GRID_SIZE - 2) * CELL_SIZE + CELL_SIZE / 2;
+                y = Phaser.Math.Between(1, GRID_SIZE - 2) * CELL_SIZE + CELL_SIZE / 2;
+            } while (player.body.some(segment => segment.x === x && segment.y === y) ||
+                     ai.body.some(segment => segment.x === x && segment.y === y));
+            food.x = x;
+            food.y = y;
+        }
+
+        function eatFood(snake) {
+            if (snake === player) {
+                playerScore += 10;
+            } else {
+                aiScore += 10;
+            }
+            scoreText.setText(`Player: ${playerScore}  AI: ${aiScore}`);
+
+            let tail = snake.body[snake.body.length - 1];
+            let newSegment = game.scene.scenes[0].add.rectangle(
+                tail.x, tail.y, 
+                CELL_SIZE, CELL_SIZE, 
+                snake === player ? 0x00ff00 : 0xff0000
+            );
+            snake.body.push(newSegment);
+
+            spawnFood(game.scene.scenes[0]);
+        }
+
+        function endGame(winner) {
+            gameState = 'gameOver';
+            gameOver = true;
+            if (playerScore > highScore) {
+                highScore = playerScore;
+            }
+            let scene = game.scene.scenes[0];
+            scene.add.rectangle(GAME_WIDTH/2, GAME_HEIGHT/2, GAME_WIDTH * 0.7, GAME_HEIGHT * 0.5, 0x000000, 0.8).setOrigin(0.5);
+            scene.add.text(GAME_WIDTH/2, GAME_HEIGHT/2 - 60, `Game Over! ${winner} wins!`, 
+                { fontSize: '24px', fill: '#ffffff' }).setOrigin(0.5);
+            scene.add.text(GAME_WIDTH/2, GAME_HEIGHT/2 - 20, `Your Score: ${playerScore}`, 
+                { fontSize: '20px', fill: '#ffffff' }).setOrigin(0.5);
+            scene.add.text(GAME_WIDTH/2, GAME_HEIGHT/2 + 20, `High Score: ${highScore}`, 
+                { fontSize: '20px', fill: '#ffffff' }).setOrigin(0.5);
+            restartButton = scene.add.text(GAME_WIDTH/2, GAME_HEIGHT/2 + 60, 'Restart', 
+                { fontSize: '20px', fill: '#ffffff' })
+                .setOrigin(0.5)
+                .setInteractive()
+                .on('pointerdown', () => {
+                    scene.scene.restart();
+                });
+        }
+
+    } catch (error) {
+        console.error("An error occurred:", error);
+        document.body.innerHTML = `<h1>An error occurred</h1><p>${error.message}</p>`;
     }
     </script>
 </body>
