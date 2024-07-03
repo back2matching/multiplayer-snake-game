@@ -8,7 +8,7 @@
 </head>
 <body>
     <script>
-    const GRID_SIZE = 22;
+    const GRID_SIZE = 20;
     const CELL_SIZE = 20;
     const GAME_WIDTH = GRID_SIZE * CELL_SIZE;
     const GAME_HEIGHT = GRID_SIZE * CELL_SIZE;
@@ -114,27 +114,37 @@
         }
         
         player = {
-            body: [scene.add.rectangle(CELL_SIZE * 6, CELL_SIZE * 11, CELL_SIZE * 0.9, CELL_SIZE * 0.9, 0x00ff00)],
+            body: [scene.add.rectangle(CELL_SIZE * 5 + CELL_SIZE / 2, CELL_SIZE * 10 + CELL_SIZE / 2, CELL_SIZE, CELL_SIZE, 0x00ff00)],
             direction: {x: 1, y: 0},
             nextDirection: {x: 1, y: 0},
             queuedDirection: null
         };
 
         ai = {
-            body: [scene.add.rectangle(CELL_SIZE * 16, CELL_SIZE * 11, CELL_SIZE * 0.9, CELL_SIZE * 0.9, 0xff0000)],
+            body: [scene.add.rectangle(CELL_SIZE * 15 + CELL_SIZE / 2, CELL_SIZE * 10 + CELL_SIZE / 2, CELL_SIZE, CELL_SIZE, 0xff0000)],
             direction: {x: -1, y: 0}
         };
 
-        food = scene.add.rectangle(0, 0, CELL_SIZE * 0.9, CELL_SIZE * 0.9, 0xffffff);
+        food = scene.add.rectangle(0, 0, CELL_SIZE * 0.8, CELL_SIZE * 0.8, 0xffffff);
         spawnFood(scene);
 
         scoreText = scene.add.text(16, 16, 'Player: 0  AI: 0', { fontSize: '16px', fill: '#ffffff' });
 
         moveEvent = scene.time.addEvent({
-            delay: 300,
+            delay: 200,
             callback: moveSnakes,
             callbackScope: scene,
             loop: true
+        });
+
+        // Make food flash
+        scene.tweens.add({
+            targets: food,
+            alpha: 0,
+            duration: 500,
+            ease: 'Power2',
+            yoyo: true,
+            repeat: -1
         });
     }
 
@@ -218,13 +228,13 @@
 
         let nextX = ai.body[0].x + ai.direction.x * CELL_SIZE;
         let nextY = ai.body[0].y + ai.direction.y * CELL_SIZE;
-        if (nextX <= CELL_SIZE || nextX >= GAME_WIDTH - CELL_SIZE * 2 || 
-            nextY <= CELL_SIZE || nextY >= GAME_HEIGHT - CELL_SIZE * 2 ||
+        if (nextX <= CELL_SIZE || nextX >= GAME_WIDTH - CELL_SIZE || 
+            nextY <= CELL_SIZE || nextY >= GAME_HEIGHT - CELL_SIZE ||
             ai.body.some((segment, index) => index > 0 && segment.x === nextX && segment.y === nextY)) {
             let directions = [{x: 1, y: 0}, {x: -1, y: 0}, {x: 0, y: 1}, {x: 0, y: -1}];
             directions = directions.filter(dir => 
-                !(nextX + dir.x * CELL_SIZE <= CELL_SIZE || nextX + dir.x * CELL_SIZE >= GAME_WIDTH - CELL_SIZE * 2 || 
-                nextY + dir.y * CELL_SIZE <= CELL_SIZE || nextY + dir.y * CELL_SIZE >= GAME_HEIGHT - CELL_SIZE * 2)
+                !(nextX + dir.x * CELL_SIZE <= CELL_SIZE || nextX + dir.x * CELL_SIZE >= GAME_WIDTH - CELL_SIZE || 
+                nextY + dir.y * CELL_SIZE <= CELL_SIZE || nextY + dir.y * CELL_SIZE >= GAME_HEIGHT - CELL_SIZE)
             );
             if (directions.length > 0) {
                 ai.direction = directions[Math.floor(Math.random() * directions.length)];
@@ -243,8 +253,8 @@
 
     function checkCollision(snake) {
         let head = snake.body[0];
-        if (head.x < CELL_SIZE || head.x > GAME_WIDTH - CELL_SIZE * 2 || 
-            head.y < CELL_SIZE || head.y > GAME_HEIGHT - CELL_SIZE * 2) {
+        if (head.x <= CELL_SIZE || head.x >= GAME_WIDTH - CELL_SIZE || 
+            head.y <= CELL_SIZE || head.y >= GAME_HEIGHT - CELL_SIZE) {
             return true;
         }
         for (let i = 1; i < snake.body.length; i++) {
@@ -257,9 +267,9 @@
     }
 
     function checkFoodCollision() {
-        if (Phaser.Math.Distance.Between(player.body[0].x, player.body[0].y, food.x, food.y) < CELL_SIZE / 2) {
+        if (player.body[0].x === food.x && player.body[0].y === food.y) {
             eatFood(player);
-        } else if (Phaser.Math.Distance.Between(ai.body[0].x, ai.body[0].y, food.x, food.y) < CELL_SIZE / 2) {
+        } else if (ai.body[0].x === food.x && ai.body[0].y === food.y) {
             eatFood(ai);
         }
     }
@@ -267,10 +277,10 @@
     function spawnFood(scene) {
         let x, y;
         do {
-            x = Phaser.Math.Between(2, GRID_SIZE - 3) * CELL_SIZE + CELL_SIZE / 2;
-            y = Phaser.Math.Between(2, GRID_SIZE - 3) * CELL_SIZE + CELL_SIZE / 2;
-        } while (player.body.some(segment => Phaser.Math.Distance.Between(segment.x, segment.y, x, y) < CELL_SIZE) ||
-                 ai.body.some(segment => Phaser.Math.Distance.Between(segment.x, segment.y, x, y) < CELL_SIZE));
+            x = Phaser.Math.Between(1, GRID_SIZE - 2) * CELL_SIZE + CELL_SIZE / 2;
+            y = Phaser.Math.Between(1, GRID_SIZE - 2) * CELL_SIZE + CELL_SIZE / 2;
+        } while (player.body.some(segment => segment.x === x && segment.y === y) ||
+                 ai.body.some(segment => segment.x === x && segment.y === y));
         food.x = x;
         food.y = y;
     }
@@ -286,15 +296,12 @@
         let tail = snake.body[snake.body.length - 1];
         let newSegment = game.scene.scenes[0].add.rectangle(
             tail.x, tail.y, 
-            CELL_SIZE * 0.9, CELL_SIZE * 0.9, 
+            CELL_SIZE, CELL_SIZE, 
             snake === player ? 0x00ff00 : 0xff0000
         );
         snake.body.push(newSegment);
 
         spawnFood(game.scene.scenes[0]);
-
-        // Increase game speed slightly
-        moveEvent.delay *= 0.98;
     }
 
     function endGame(winner) {
@@ -315,4 +322,10 @@
             { fontSize: '20px', fill: '#ffffff' })
             .setOrigin(0.5)
             .setInteractive()
-            .on('pointerdown', () =>
+            .on('pointerdown', () => {
+                scene.scene.restart();
+            });
+    }
+    </script>
+</body>
+</html>
