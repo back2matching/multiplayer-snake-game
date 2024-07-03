@@ -9,7 +9,7 @@
 <body>
     <script>
     const GRID_SIZE = 22;
-    const CELL_SIZE = 15;
+    const CELL_SIZE = 20; // Increased cell size for easier navigation
     const GAME_WIDTH = GRID_SIZE * CELL_SIZE;
     const GAME_HEIGHT = GRID_SIZE * CELL_SIZE;
 
@@ -42,6 +42,7 @@
     let difficultyTexts = [];
     let highScore = 0;
     let highScoreText;
+    let moveEvent;
 
     function create() {
         cursors = this.input.keyboard.createCursorKeys();
@@ -79,7 +80,6 @@
 
         highScoreText = scene.add.text(GAME_WIDTH/2, GAME_HEIGHT * 5/6, `High Score: ${highScore}`, { fontSize: '18px', fill: '#ffffff' }).setOrigin(0.5);
 
-        // Add instructions
         scene.add.text(GAME_WIDTH/2, GAME_HEIGHT * 3/4, 'Use arrow keys to select difficulty', { fontSize: '14px', fill: '#888888' }).setOrigin(0.5);
         scene.add.text(GAME_WIDTH/2, GAME_HEIGHT * 3/4 + 20, 'Press ENTER to start', { fontSize: '14px', fill: '#888888' }).setOrigin(0.5);
     }
@@ -114,23 +114,24 @@
         }
         
         player = {
-            body: [scene.add.rectangle(CELL_SIZE * 6, CELL_SIZE * 11, CELL_SIZE * 0.75, CELL_SIZE * 0.75, 0x00ff00)],
+            body: [scene.add.rectangle(CELL_SIZE * 6, CELL_SIZE * 11, CELL_SIZE * 0.9, CELL_SIZE * 0.9, 0x00ff00)],
             direction: {x: 1, y: 0},
             nextDirection: {x: 1, y: 0}
         };
 
         ai = {
-            body: [scene.add.rectangle(CELL_SIZE * 16, CELL_SIZE * 11, CELL_SIZE * 0.75, CELL_SIZE * 0.75, 0xff0000)],
+            body: [scene.add.rectangle(CELL_SIZE * 16, CELL_SIZE * 11, CELL_SIZE * 0.9, CELL_SIZE * 0.9, 0xff0000)],
             direction: {x: -1, y: 0}
         };
 
-        food = scene.add.rectangle(0, 0, CELL_SIZE * 0.75, CELL_SIZE * 0.75, 0xffffff);
+        food = scene.add.rectangle(0, 0, CELL_SIZE * 0.9, CELL_SIZE * 0.9, 0xffffff);
         spawnFood(scene);
 
         scoreText = scene.add.text(16, 16, 'Player: 0  AI: 0', { fontSize: '16px', fill: '#ffffff' });
 
-        scene.time.addEvent({
-            delay: 200,
+        // Increased delay for slower game speed
+        moveEvent = scene.time.addEvent({
+            delay: 300,
             callback: moveSnakes,
             callbackScope: scene,
             loop: true
@@ -147,13 +148,14 @@
                 updateSelectedDifficulty(this);
             }
         } else if (gameState === 'playing') {
-            if (cursors.left.isDown && player.direction.x === 0) {
+            // More responsive controls
+            if (cursors.left.isDown && player.direction.x !== 1) {
                 player.nextDirection = {x: -1, y: 0};
-            } else if (cursors.right.isDown && player.direction.x === 0) {
+            } else if (cursors.right.isDown && player.direction.x !== -1) {
                 player.nextDirection = {x: 1, y: 0};
-            } else if (cursors.up.isDown && player.direction.y === 0) {
+            } else if (cursors.up.isDown && player.direction.y !== 1) {
                 player.nextDirection = {x: 0, y: -1};
-            } else if (cursors.down.isDown && player.direction.y === 0) {
+            } else if (cursors.down.isDown && player.direction.y !== -1) {
                 player.nextDirection = {x: 0, y: 1};
             }
         }
@@ -176,11 +178,7 @@
             return;
         }
 
-        if (player.body[0].x === food.x && player.body[0].y === food.y) {
-            eatFood(player);
-        } else if (ai.body[0].x === food.x && ai.body[0].y === food.y) {
-            eatFood(ai);
-        }
+        checkFoodCollision();
     }
 
     function moveSnake(snake) {
@@ -251,15 +249,23 @@
         return otherSnake.body.some(segment => head.x === segment.x && head.y === segment.y);
     }
 
+    function checkFoodCollision() {
+        if (Phaser.Math.Distance.Between(player.body[0].x, player.body[0].y, food.x, food.y) < CELL_SIZE / 2) {
+            eatFood(player);
+        } else if (Phaser.Math.Distance.Between(ai.body[0].x, ai.body[0].y, food.x, food.y) < CELL_SIZE / 2) {
+            eatFood(ai);
+        }
+    }
+
     function spawnFood(scene) {
         let x, y;
         do {
-            x = Phaser.Math.Between(2, GRID_SIZE - 3) * CELL_SIZE;
-            y = Phaser.Math.Between(2, GRID_SIZE - 3) * CELL_SIZE;
-        } while (player.body.some(segment => segment.x === x && segment.y === y) ||
-                 ai.body.some(segment => segment.x === x && segment.y === y));
-        food.x = x + CELL_SIZE / 2;
-        food.y = y + CELL_SIZE / 2;
+            x = Phaser.Math.Between(2, GRID_SIZE - 3) * CELL_SIZE + CELL_SIZE / 2;
+            y = Phaser.Math.Between(2, GRID_SIZE - 3) * CELL_SIZE + CELL_SIZE / 2;
+        } while (player.body.some(segment => Phaser.Math.Distance.Between(segment.x, segment.y, x, y) < CELL_SIZE) ||
+                 ai.body.some(segment => Phaser.Math.Distance.Between(segment.x, segment.y, x, y) < CELL_SIZE));
+        food.x = x;
+        food.y = y;
     }
 
     function eatFood(snake) {
@@ -273,7 +279,7 @@
         let tail = snake.body[snake.body.length - 1];
         let newSegment = game.scene.scenes[0].add.rectangle(
             tail.x, tail.y, 
-            CELL_SIZE * 0.75, CELL_SIZE * 0.75, 
+            CELL_SIZE * 0.9, CELL_SIZE * 0.9, 
             snake === player ? 0x00ff00 : 0xff0000
         );
         snake.body.push(newSegment);
