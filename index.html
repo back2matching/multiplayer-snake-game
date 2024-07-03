@@ -44,24 +44,22 @@
     let highScoreText;
 
     function create() {
-        console.log("Create function called");
         cursors = this.input.keyboard.createCursorKeys();
         createMenu(this);
     }
 
     function createMenu(scene) {
-        console.log("Creating menu");
-        scene.add.text(GAME_WIDTH/2, GAME_HEIGHT/6, 'Snake vs AI', { fontSize: '48px', fill: '#ffffff' }).setOrigin(0.5);
+        scene.add.text(GAME_WIDTH/2, GAME_HEIGHT/6, 'Snake vs AI', { fontSize: '32px', fill: '#ffffff' }).setOrigin(0.5);
         
         const difficulties = ['Easy', 'Medium', 'Hard'];
-        const spacing = GAME_WIDTH / 4;  // Space between difficulty options
+        const spacing = GAME_WIDTH / 4;
 
         difficulties.forEach((difficulty, index) => {
             let textObject = scene.add.text(
                 (index + 1) * spacing, 
                 GAME_HEIGHT/2, 
                 difficulty, 
-                { fontSize: '32px', fill: '#ffffff' }
+                { fontSize: '20px', fill: '#ffffff' }
             )
             .setOrigin(0.5)
             .setInteractive()
@@ -79,23 +77,26 @@
             startGame(scene);
         });
 
-        highScoreText = scene.add.text(GAME_WIDTH/2, GAME_HEIGHT * 5/6, `High Score: ${highScore}`, { fontSize: '24px', fill: '#ffffff' }).setOrigin(0.5);
+        highScoreText = scene.add.text(GAME_WIDTH/2, GAME_HEIGHT * 5/6, `High Score: ${highScore}`, { fontSize: '18px', fill: '#ffffff' }).setOrigin(0.5);
+
+        // Add instructions
+        scene.add.text(GAME_WIDTH/2, GAME_HEIGHT * 3/4, 'Use arrow keys to select difficulty', { fontSize: '14px', fill: '#888888' }).setOrigin(0.5);
+        scene.add.text(GAME_WIDTH/2, GAME_HEIGHT * 3/4 + 20, 'Press ENTER to start', { fontSize: '14px', fill: '#888888' }).setOrigin(0.5);
     }
 
     function updateSelectedDifficulty(scene) {
         difficultyTexts.forEach((text, index) => {
             if (index === selectedDifficulty) {
                 text.setColor('#ffff00');
-                text.setStyle({ fontSize: '40px' });  // Increase size for selected option
+                text.setStyle({ fontSize: '24px' });
             } else {
                 text.setColor('#ffffff');
-                text.setStyle({ fontSize: '32px' });  // Reset size for non-selected options
+                text.setStyle({ fontSize: '20px' });
             }
         });
     }
 
     function startGame(scene) {
-        console.log("Starting game");
         gameState = 'playing';
         playerScore = 0;
         aiScore = 0;
@@ -126,10 +127,10 @@
         food = scene.add.rectangle(0, 0, CELL_SIZE * 0.75, CELL_SIZE * 0.75, 0xffffff);
         spawnFood(scene);
 
-        scoreText = scene.add.text(16, 16, 'Player: 0  AI: 0', { fontSize: '18px', fill: '#ffffff' });
+        scoreText = scene.add.text(16, 16, 'Player: 0  AI: 0', { fontSize: '16px', fill: '#ffffff' });
 
         scene.time.addEvent({
-            delay: 200,  // Increased delay for slower game speed
+            delay: 200,
             callback: moveSnakes,
             callbackScope: scene,
             loop: true
@@ -286,16 +287,18 @@
         if (playerScore > highScore) {
             highScore = playerScore;
         }
-        game.scene.scenes[0].add.text(GAME_WIDTH/2, GAME_HEIGHT/2, `Game Over! ${winner} wins!`, 
-            { fontSize: '32px', fill: '#ffffff' }).setOrigin(0.5);
-        game.scene.scenes[0].add.text(GAME_WIDTH/2, GAME_HEIGHT/2 + 40, `Your Score: ${playerScore}`, 
+        let scene = game.scene.scenes[0];
+        scene.add.rectangle(GAME_WIDTH/2, GAME_HEIGHT/2, GAME_WIDTH * 0.7, GAME_HEIGHT * 0.5, 0x000000, 0.8).setOrigin(0.5);
+        scene.add.text(GAME_WIDTH/2, GAME_HEIGHT/2 - 40, `Game Over! ${winner} wins!`, 
             { fontSize: '24px', fill: '#ffffff' }).setOrigin(0.5);
-        restartButton = game.scene.scenes[0].add.text(GAME_WIDTH/2, GAME_HEIGHT * 3/4, 'Restart', 
-            { fontSize: '24px', fill: '#ffffff' })
+        scene.add.text(GAME_WIDTH/2, GAME_HEIGHT/2, `Your Score: ${playerScore}`, 
+            { fontSize: '20px', fill: '#ffffff' }).setOrigin(0.5);
+        restartButton = scene.add.text(GAME_WIDTH/2, GAME_HEIGHT/2 + 40, 'Restart', 
+            { fontSize: '20px', fill: '#ffffff' })
             .setOrigin(0.5)
             .setInteractive()
             .on('pointerdown', () => {
-                game.scene.scenes[0].scene.restart();
+                scene.scene.restart();
             });
     }
     </script>
